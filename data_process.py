@@ -3,6 +3,7 @@ from sqlalchemy import create_engine
 import pandas as pd
 import bt
 import time
+import numpy as np
 
 def get_clean_df():
 
@@ -78,42 +79,20 @@ def get_clean_df():
 
 def get_listing_delisting_date(df, key):
     ## 상장일과 상장폐지일을 리턴
-    sum_close = 0
-    for i in range(len(df)):
-        close = df[key].iloc[i]
-        sum_close += close
-    
-        if sum_close > 0:
-            listing_date = df.index[i]
-            break
-    
-    sum_close = 0
-    delisting_date = None
-    for i in range(len(df) - 1, 0, -1):
-        close = df[key].iloc[i]
-        sum_close += close
-        
-        if sum_close > 0:
-            delisting_date = df.index[i]
-            break
-
+    non_zero_df = df[df[key] > 0]
+    listing_date = non_zero_df.first_valid_index()
+    delisting_date = non_zero_df.last_valid_index()
     return listing_date, delisting_date
 
 
 def get_error_date(df, key):
     ## 문제있는 날짜들을 리턴
-    error_date = []
-    
     list_date, delist_date = get_listing_delisting_date(df, key)
-    
     end_date = delist_date if delist_date else END
+
     listed = df[key].loc[list_date:end_date]
-    
-    for date in listed.index:
-        if listed[date] == 0:
-            error_date.append(date)
-            
-    return error_date
+
+    return listed.index[listed == 0].tolist()
 
 
 def fix_error_date(df, key):
@@ -122,8 +101,5 @@ def fix_error_date(df, key):
     end_date = delist_date if delist_date else END
     listed = df[key].loc[list_date:end_date]
     
-    for i in range(len(listed.index)):
-        date = listed.index[i]
-        if listed[date] == 0:
-            prev_date = listed.index[i-1]
-            df[key].loc[date] = df[key].loc[prev_date]
+    df[key].replace(0, np.nan, inplace=True)
+    df[key].fillna(method='ffill', inplace=True)
